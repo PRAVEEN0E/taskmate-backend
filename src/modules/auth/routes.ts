@@ -17,7 +17,7 @@ export async function authRoutes(app: FastifyInstance, store: AuthStore, config:
   app.post(
     '/api/v1/auth/login',
     {
-      config: { rateLimit: { max: 5, timeWindow: '15 minutes' } },
+      config: { rateLimit: { max: 50, timeWindow: '15 minutes' } },
       schema: {
         tags: ['Authentication'],
         summary: 'Sign in as the initialized owner',
