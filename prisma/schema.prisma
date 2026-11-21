@@ -1,0 +1,680 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ProjectStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum TransactionKind {
+  INCOME
+  EXPENSE
+}
+
+enum RecurrenceRule {
+  NONE
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum ReminderStatus {
+  PENDING
+  TRIGGERED
+  SNOOZED
+  DISMISSED
+}
+
+enum AIProposalStatus {
+  PROPOSED
+  CONFIRMED
+  REJECTED
+  CONSUMED
+}
+
+model User {
+  id             String   @id @default(uuid()) @db.Uuid
+  ownerSlot      Int      @unique @default(1)
+  email          String   @unique
+  username       String   @unique
+  name           String
+  passwordHash   String
+  failedLogins   Int      @default(0)
+  lockedUntil    DateTime? @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  sessions       Session[]
+  settings       UserSettings?
+  tasks          Task[]
+  subtasks       Subtask[]
+  taskCategories TaskCategory[]
+  tags           Tag[]
+  notes          Note[]
+  noteFolders    NoteFolder[]
+  calendarEvents CalendarEvent[]
+  reminders      Reminder[]
+  aiConversations AIConversation[]
+  aiProposals    AIProposal[]
+  projects       Project[]
+  projectMilestones ProjectMilestone[]
+  focusSessions  FocusSession[]
+  habits         Habit[]
+  habitLogs      HabitLog[]
+  goals          Goal[]
+  goalMilestones GoalMilestone[]
+  transactions   ExpenseTransaction[]
+  expenseCategories ExpenseCategory[]
+  budgets        Budget[]
+  bookmarks      Bookmark[]
+  bookmarkFolders BookmarkFolder[]
+  learningPaths  LearningPath[]
+  learningTopics LearningTopic[]
+  learningResources LearningResource[]
+  certifications Certification[]
+  journalEntries JournalEntry[]
+  files          FileAsset[]
+  fileFolders    FileFolder[]
+  notifications  Notification[]
+}
+
+model Session {
+  id         String   @id @default(uuid()) @db.Uuid
+  ownerId    String   @db.Uuid
+  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId, expiresAt])
+}
+
+model UserSettings {
+  id             String   @id @default(uuid()) @db.Uuid
+  ownerId        String   @unique @db.Uuid
+  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  timezone       String   @default("Asia/Kolkata")
+  currency       String   @default("INR")
+  theme          String   @default("dark")
+  focusMinutes   Int      @default(25)
+  shortBreak     Int      @default(5)
+  longBreak      Int      @default(15)
+  emailReminders Boolean  @default(false)
+  aiEnabled      Boolean  @default(false)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+}
+
+// ---------------------- PHASE 2: CORE PRODUCTIVITY ----------------------
+
+model TaskCategory {
+  id        String   @id @default(uuid()) @db.Uuid
+  ownerId   String   @db.Uuid
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name      String   @db.VarChar(80)
+  color     String   @default("#38bdf8")
+  tasks     Task[]
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([ownerId, name])
+  @@index([ownerId])
+}
+
+model Tag {
+  id        String   @id @default(uuid()) @db.Uuid
+  ownerId   String   @db.Uuid
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name      String   @db.VarChar(50)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  tasks     TaskTag[]
+  notes     NoteTag[]
+  bookmarks BookmarkTag[]
+
+  @@unique([ownerId, name])
+  @@index([ownerId])
+}
+
+model Task {
+  id          String         @id @default(uuid()) @db.Uuid
+  ownerId     String         @db.Uuid
+  owner       User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  categoryId  String?        @db.Uuid
+  category    TaskCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  projectId   String?        @db.Uuid
+  project     Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  goalId      String?        @db.Uuid
+  goal        Goal?          @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  title       String         @db.VarChar(200)
+  description String         @default("")
+  status      TaskStatus     @default(TODO)
+  priority    Priority       @default(MEDIUM)
+  dueAt       DateTime?      @db.Timestamptz(3)
+  completedAt DateTime?      @db.Timestamptz(3)
+  recurrence  RecurrenceRule @default(NONE)
+  createdAt   DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime       @updatedAt @db.Timestamptz(3)
+
+  subtasks      Subtask[]
+  reminders     Reminder[]
+  tags          TaskTag[]
+  focusSessions FocusSession[]
+
+  @@index([ownerId, status, dueAt])
+  @@index([ownerId, completedAt])
+  @@index([ownerId, projectId])
+}
+
+model Subtask {
+  id          String   @id @default(uuid()) @db.Uuid
+  ownerId     String   @db.Uuid
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  taskId      String   @db.Uuid
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  title       String   @db.VarChar(200)
+  completed   Boolean  @default(false)
+  position    Int      @default(0)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([taskId, position])
+  @@index([ownerId])
+}
+
+model TaskTag {
+  taskId String @db.Uuid
+  tagId  String @db.Uuid
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, tagId])
+}
+
+model NoteFolder {
+  id        String       @id @default(uuid()) @db.Uuid
+  ownerId   String       @db.Uuid
+  owner     User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name      String       @db.VarChar(100)
+  parentId  String?      @db.Uuid
+  parent    NoteFolder?  @relation("NoteFolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children  NoteFolder[] @relation("NoteFolderHierarchy")
+  notes     Note[]
+  createdAt DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId, parentId])
+}
+
+model Note {
+  id        String     @id @default(uuid()) @db.Uuid
+  ownerId   String     @db.Uuid
+  owner     User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  folderId  String?    @db.Uuid
+  folder    NoteFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  title     String     @db.VarChar(200)
+  content   Json
+  rawText   String     @default("")
+  archived  Boolean    @default(false)
+  pinned    Boolean    @default(false)
+  createdAt DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime   @updatedAt @db.Timestamptz(3)
+
+  tags        NoteTag[]
+  attachments NoteAttachment[]
+
+  @@index([ownerId, archived, updatedAt])
+  @@index([ownerId, pinned])
+}
+
+model NoteTag {
+  noteId String @db.Uuid
+  tagId  String @db.Uuid
+  note   Note   @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, tagId])
+}
+
+model CalendarEvent {
+  id          String         @id @default(uuid()) @db.Uuid
+  ownerId     String         @db.Uuid
+  owner       User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title       String         @db.VarChar(200)
+  description String         @default("")
+  startAt     DateTime       @db.Timestamptz(3)
+  endAt       DateTime       @db.Timestamptz(3)
+  allDay      Boolean        @default(false)
+  color       String         @default("#38bdf8")
+  recurrence  RecurrenceRule @default(NONE)
+  reminders   Reminder[]
+  createdAt   DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime       @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId, startAt, endAt])
+}
+
+model Reminder {
+  id          String         @id @default(uuid()) @db.Uuid
+  ownerId     String         @db.Uuid
+  owner       User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  taskId      String?        @db.Uuid
+  task        Task?          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  eventId     String?        @db.Uuid
+  event       CalendarEvent? @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  title       String         @db.VarChar(200)
+  remindAt    DateTime       @db.Timestamptz(3)
+  status      ReminderStatus @default(PENDING)
+  sentEmail   Boolean        @default(false)
+  createdAt   DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime       @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId, remindAt, status])
+}
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  ownerId   String   @db.Uuid
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title     String   @db.VarChar(160)
+  body      String
+  link      String?
+  readAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId, readAt, createdAt])
+}
+
+// ---------------------- PHASE 3: AI & PRODUCTIVITY ----------------------
+
+model AIConversation {
+  id        String      @id @default(uuid()) @db.Uuid
+  ownerId   String      @db.Uuid
+  owner     User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title     String      @default("New Conversation") @db.VarChar(150)
+  messages  AIMessage[]
+  createdAt DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime    @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId, updatedAt])
+}
+
+model AIMessage {
+  id             String         @id @default(uuid()) @db.Uuid
+  conversationId String         @db.Uuid
+  conversation   AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String         // "user" | "model"
+  content        String
+  tokens         Int?
+  createdAt      DateTime       @default(now()) @db.Timestamptz(3)
+
+  @@index([conversationId, createdAt])
+}
+
+model AIProposal {
+  id          String           @id @default(uuid()) @db.Uuid
+  ownerId     String           @db.Uuid
+  owner       User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  actionType  String           // "CREATE_TASK" | "DAILY_PLAN" | "TASK_BREAKDOWN"
+  payload     Json
+  status      AIProposalStatus @default(PROPOSED)
+  createdAt   DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId, status])
+}
+
+model FocusSession {
+  id              String   @id @default(uuid()) @db.Uuid
+  ownerId         String   @db.Uuid
+  owner           User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  taskId          String?  @db.Uuid
+  task            Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  startedAt       DateTime @db.Timestamptz(3)
+  durationSeconds Int
+  completed       Boolean  @default(false)
+  notes           String   @default("")
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId, startedAt])
+}
+
+model Habit {
+  id          String     @id @default(uuid()) @db.Uuid
+  ownerId     String     @db.Uuid
+  owner       User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name        String     @db.VarChar(120)
+  description String     @default("")
+  color       String     @default("#10b981")
+  archived    Boolean    @default(false)
+  logs        HabitLog[]
+  createdAt   DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId, archived])
+}
+
+model HabitLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  ownerId   String   @db.Uuid
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  habitId   String   @db.Uuid
+  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  date      String   // "YYYY-MM-DD" in owner timezone
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([habitId, date])
+  @@index([ownerId, date])
+}
+
+model Goal {
+  id          String          @id @default(uuid()) @db.Uuid
+  ownerId     String          @db.Uuid
+  owner       User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title       String          @db.VarChar(150)
+  description String          @default("")
+  targetAt    DateTime?       @db.Timestamptz(3)
+  completedAt DateTime?       @db.Timestamptz(3)
+  milestones  GoalMilestone[]
+  tasks       Task[]
+  createdAt   DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId, targetAt])
+}
+
+model GoalMilestone {
+  id          String    @id @default(uuid()) @db.Uuid
+  ownerId     String    @db.Uuid
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  goalId      String    @db.Uuid
+  goal        Goal      @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  title       String    @db.VarChar(160)
+  completed   Boolean   @default(false)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([goalId])
+}
+
+// ---------------------- PHASE 4: PERSONAL MANAGEMENT ----------------------
+
+model ExpenseCategory {
+  id           String               @id @default(uuid()) @db.Uuid
+  ownerId      String               @db.Uuid
+  owner        User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name         String               @db.VarChar(80)
+  color        String               @default("#f43f5e")
+  transactions ExpenseTransaction[]
+  budgets      Budget[]
+  createdAt    DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime             @updatedAt @db.Timestamptz(3)
+
+  @@unique([ownerId, name])
+  @@index([ownerId])
+}
+
+model ExpenseTransaction {
+  id         String           @id @default(uuid()) @db.Uuid
+  ownerId    String           @db.Uuid
+  owner      User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  categoryId String?          @db.Uuid
+  category   ExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  kind       TransactionKind
+  amount     Decimal          @db.Decimal(18, 2)
+  currency   String           @default("INR") @db.Char(3)
+  method     String           @default("UPI") // "UPI" | "CARD" | "CASH" | "NET_BANKING"
+  memo       String           @default("")
+  date       DateTime         @db.Timestamptz(3)
+  createdAt  DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId, date, kind, currency])
+}
+
+model Budget {
+  id         String          @id @default(uuid()) @db.Uuid
+  ownerId    String          @db.Uuid
+  owner      User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  categoryId String          @db.Uuid
+  category   ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  month      String          // "YYYY-MM"
+  amount     Decimal         @db.Decimal(18, 2)
+  currency   String          @default("INR") @db.Char(3)
+  createdAt  DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@unique([ownerId, categoryId, month, currency])
+  @@index([ownerId, month])
+}
+
+model BookmarkFolder {
+  id        String     @id @default(uuid()) @db.Uuid
+  ownerId   String     @db.Uuid
+  owner     User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name      String     @db.VarChar(100)
+  bookmarks Bookmark[]
+  createdAt DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime   @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId])
+}
+
+model Bookmark {
+  id          String          @id @default(uuid()) @db.Uuid
+  ownerId     String          @db.Uuid
+  owner       User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  folderId    String?         @db.Uuid
+  folder      BookmarkFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  url         String
+  title       String          @db.VarChar(200)
+  description String          @default("")
+  favorite    Boolean         @default(false)
+  tags        BookmarkTag[]
+  createdAt   DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId, favorite])
+  @@index([ownerId, folderId])
+}
+
+model BookmarkTag {
+  bookmarkId String   @db.Uuid
+  tagId      String   @db.Uuid
+  bookmark   Bookmark @relation(fields: [bookmarkId], references: [id], onDelete: Cascade)
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([bookmarkId, tagId])
+}
+
+model LearningPath {
+  id             String             @id @default(uuid()) @db.Uuid
+  ownerId        String             @db.Uuid
+  owner          User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title          String             @db.VarChar(160)
+  description    String             @default("")
+  targetAt       DateTime?          @db.Timestamptz(3)
+  topics         LearningTopic[]
+  resources      LearningResource[]
+  certifications Certification[]
+  createdAt      DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime           @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId, targetAt])
+}
+
+model LearningTopic {
+  id          String       @id @default(uuid()) @db.Uuid
+  ownerId     String       @db.Uuid
+  owner       User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  pathId      String       @db.Uuid
+  path        LearningPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  title       String       @db.VarChar(160)
+  completed   Boolean      @default(false)
+  position    Int          @default(0)
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([pathId, position])
+}
+
+model LearningResource {
+  id          String       @id @default(uuid()) @db.Uuid
+  ownerId     String       @db.Uuid
+  owner       User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  pathId      String       @db.Uuid
+  path        LearningPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  title       String       @db.VarChar(160)
+  url         String
+  type        String       @default("ARTICLE") // "ARTICLE" | "VIDEO" | "BOOK" | "COURSE"
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([pathId])
+}
+
+model Certification {
+  id          String       @id @default(uuid()) @db.Uuid
+  ownerId     String       @db.Uuid
+  owner       User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  pathId      String?      @db.Uuid
+  path        LearningPath? @relation(fields: [pathId], references: [id], onDelete: SetNull)
+  title       String       @db.VarChar(160)
+  issuer      String       @db.VarChar(160)
+  issueDate   DateTime?    @db.Timestamptz(3)
+  expiryDate  DateTime?    @db.Timestamptz(3)
+  credentialUrl String?
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId])
+}
+
+model JournalEntry {
+  id        String   @id @default(uuid()) @db.Uuid
+  ownerId   String   @db.Uuid
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  date      String   // "YYYY-MM-DD"
+  mood      String   @default("NEUTRAL") // "GREAT" | "GOOD" | "NEUTRAL" | "LOW" | "BAD"
+  title     String   @default("") @db.VarChar(160)
+  content   Json
+  rawText   String   @default("")
+  favorite  Boolean  @default(false)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([ownerId, date])
+  @@index([ownerId, date])
+}
+
+model Project {
+  id          String             @id @default(uuid()) @db.Uuid
+  ownerId     String             @db.Uuid
+  owner       User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title       String             @db.VarChar(160)
+  description String             @default("")
+  status      ProjectStatus      @default(PLANNED)
+  startAt     DateTime?          @db.Timestamptz(3)
+  targetAt    DateTime?          @db.Timestamptz(3)
+  createdAt   DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime           @updatedAt @db.Timestamptz(3)
+
+  milestones  ProjectMilestone[]
+  tasks       Task[]
+  attachments ProjectAttachment[]
+
+  @@index([ownerId, status, targetAt])
+}
+
+model ProjectMilestone {
+  id          String    @id @default(uuid()) @db.Uuid
+  ownerId     String    @db.Uuid
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  projectId   String    @db.Uuid
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String    @db.VarChar(160)
+  completed   Boolean   @default(false)
+  targetAt    DateTime? @db.Timestamptz(3)
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([projectId, position])
+}
+
+// ---------------------- PHASE 5: FILE MANAGEMENT ----------------------
+
+model FileFolder {
+  id        String       @id @default(uuid()) @db.Uuid
+  ownerId   String       @db.Uuid
+  owner     User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name      String       @db.VarChar(100)
+  files     FileAsset[]
+  createdAt DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId])
+}
+
+model FileAsset {
+  id           String              @id @default(uuid()) @db.Uuid
+  ownerId      String              @db.Uuid
+  owner        User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  folderId     String?             @db.Uuid
+  folder       FileFolder?         @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  name         String
+  publicId     String              @unique
+  url          String
+  resourceType String
+  mimeType     String
+  bytes        BigInt
+  createdAt    DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime            @updatedAt @db.Timestamptz(3)
+
+  noteAttachments    NoteAttachment[]
+  projectAttachments ProjectAttachment[]
+
+  @@index([ownerId, createdAt])
+}
+
+model NoteAttachment {
+  noteId String    @db.Uuid
+  fileId String    @db.Uuid
+  note   Note      @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  file   FileAsset @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, fileId])
+}
+
+model ProjectAttachment {
+  projectId String    @db.Uuid
+  fileId    String    @db.Uuid
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  file      FileAsset @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, fileId])
+}
