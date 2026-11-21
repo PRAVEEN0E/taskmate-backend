@@ -9,11 +9,13 @@ export function addSecurity(app: FastifyInstance, config: Config, store: AuthSto
   app.decorateRequest('principal', null);
   app.addHook('onRequest', async (req, reply) => {
     reply.header('Cache-Control', 'no-store');
-    if (
-      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) &&
-      req.headers.origin !== config.APP_ORIGIN
-    )
-      throw new HttpError(403, 'ORIGIN_REJECTED', 'Request origin is not allowed.');
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+      const origin = req.headers.origin;
+      // Allow matching APP_ORIGIN, or if proxied without browser Origin header
+      if (origin && origin !== config.APP_ORIGIN) {
+        throw new HttpError(403, 'ORIGIN_REJECTED', 'Request origin is not allowed.');
+      }
+    }
     if (req.method === 'OPTIONS') return;
     const path = req.url.split('?')[0];
     if (path === '/healthz' || path === '/api/v1/auth/login') return;
