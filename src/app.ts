@@ -112,6 +112,7 @@ export async function createApp(
   addSecurity(app, config, deps.auth);
 
   app.setErrorHandler((error, req, reply) => {
+    req.log.error({ err: error, requestId: req.id }, 'Request failed or rejected');
     if (error instanceof ZodError)
       return reply.code(400).send({
         error: {
@@ -128,7 +129,12 @@ export async function createApp(
         error: { code: 'RATE_LIMITED', message: 'Too many attempts. Please wait and try again.' },
       });
     if (status >= 400 && status < 500)
-      return reply.code(status).send({ error: { code: 'BAD_REQUEST', message: 'The request could not be accepted.' } });
+      return reply.code(status).send({
+        error: {
+          code: 'BAD_REQUEST',
+          message: (error as Error)?.message || 'The request could not be accepted.',
+        },
+      });
 
     req.log.error({ requestId: req.id }, 'Request failed');
     return reply.code(500).send({
