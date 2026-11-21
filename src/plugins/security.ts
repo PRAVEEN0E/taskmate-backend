@@ -17,7 +17,7 @@ export function addSecurity(app: FastifyInstance, config: Config, store: AuthSto
       }
     }
     if (req.method === 'OPTIONS') return;
-    const path = req.url.split('?')[0];
+    const path = req.url.split('?')[0].replace(/\/$/, '');
     if (path === '/healthz' || path === '/api/v1/auth/login') return;
     let claims: Claims;
     try {
