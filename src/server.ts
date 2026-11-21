@@ -63,9 +63,33 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 
 try {
   await db.$connect();
+
+  // Auto-bootstrap owner account if no owner exists yet
+  const ownerCount = await db.user.count();
+  if (ownerCount === 0) {
+    const bcrypt = (await import('bcrypt')).default;
+    const email = (process.env.OWNER_EMAIL || 'owner@example.com').toLowerCase();
+    const username = (process.env.OWNER_USERNAME || 'owner').toLowerCase();
+    const name = process.env.OWNER_NAME || 'Owner';
+    const password = process.env.OWNER_PASSWORD || 'TaskMateOwner123!';
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    await db.user.create({
+      data: {
+        ownerSlot: 1,
+        email,
+        username,
+        name,
+        passwordHash,
+        settings: { create: {} },
+      },
+    });
+    app.log.info({ email, username }, 'Auto-bootstrapped initial owner account on first start.');
+  }
+
   await app.listen({ port: config.PORT, host: config.HOST });
-} catch {
-  app.log.fatal('Startup failed. Check database connectivity and configuration.');
+} catch (err) {
+  app.log.fatal(err, 'Startup failed. Check database connectivity and configuration.');
   await app.close();
   process.exitCode = 1;
 }
