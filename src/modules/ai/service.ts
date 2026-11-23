@@ -103,14 +103,10 @@ Recent notes: ${JSON.stringify(notes)}
 Be concise, proactive, clear, and prioritize actionable steps.`;
 
     try {
-      const response = await this.ai.models.generateContent({
-        model: 'gemini-3.5-flash-lite',
-        contents: [
-          { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser: ${content}` }] },
-        ],
-      });
+      const replyText = await this.callGeminiWithFallback([
+        { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser: ${content}` }] },
+      ]);
 
-      const replyText = response.text || 'I could not generate a response.';
       const modelMsg = await this.prisma.aIMessage.create({
         data: {
           conversationId,
@@ -137,7 +133,37 @@ Be concise, proactive, clear, and prioritize actionable steps.`;
     }
   }
 
-  // Mandatory confirmation workflow: Step 1 (Create proposal)
+  private async callGeminiWithFallback(contents: any): Promise<string> {
+    if (!this.ai) throw new Error('Gemini API key is not configured');
+
+    const candidateModels = [
+      'gemini-3.5-flash-lite',
+      'gemini-3.8-flash',
+      'gemini-3.5-flash',
+      'gemini-3.1-flash-lite',
+      'gemini-3.7-flash',
+    ];
+
+    let lastError: any = null;
+
+    for (const model of candidateModels) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const response = await this.ai.models.generateContent({
+            model,
+            contents,
+          });
+          if (response.text) return response.text;
+        } catch (err: any) {
+          lastError = err;
+          // If 503 high demand or temporary failure, wait slightly and try next
+          await new Promise((r) => setTimeout(r, 600));
+        }
+      }
+    }
+
+    throw lastError || new Error('All Gemini candidate models are currently busy. Please try again in a few moments.');
+  }
   async createProposal(ownerId: string, actionType: string, prompt: string) {
     if (!this.ai) {
       // Deterministic fallback proposal
@@ -165,17 +191,20 @@ Output valid JSON ONLY matching:
   "subtasks": string[]
 }`;
 
-    const res = await this.ai.models.generateContent({
-      model: 'gemini-3.5-flash-lite',
-      contents: [{ role: 'user', parts: [{ text: extractionPrompt }] }],
-    });
-
     let payload: any;
     try {
-      const text = res.text?.replace(/```json|```/g, '').trim() || '{}';
+      const replyText = await this.callGeminiWithFallback([
+        { role: 'user', parts: [{ text: extractionPrompt }] },
+      ]);
+      const text = replyText.replace(/```json|```/g, '').trim();
       payload = JSON.parse(text);
     } catch {
-      payload = { title: prompt, priority: 'MEDIUM', subtasks: [] };
+      payload = {
+        title: prompt,
+        priority: 'MEDIUM',
+        description: 'Auto-structured plan for: ' + prompt,
+        subtasks: ['Setup environment', 'Implement core logic', 'Test and verify'],
+      };
     }
 
     return this.prisma.aIProposal.create({
