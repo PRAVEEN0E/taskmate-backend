@@ -5,7 +5,7 @@ import { z } from 'zod';
 const recordUploadSchema = z.object({
   name: z.string().trim().min(1),
   publicId: z.string().min(1),
-  url: z.string().url(),
+  url: z.string().min(1),
   resourceType: z.string().default('raw'),
   mimeType: z.string().default('application/octet-stream'),
   bytes: z.number().nonnegative(),

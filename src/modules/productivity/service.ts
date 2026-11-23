@@ -19,6 +19,10 @@ export const toggleHabitLogSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
+export const createMilestoneSchema = z.object({
+  title: z.string().trim().min(1).max(160),
+});
+
 export const createGoalSchema = z.object({
   title: z.string().trim().min(1).max(150),
   description: z.string().default(''),
@@ -118,6 +122,19 @@ export class ProductivityService {
         } : undefined,
       },
       include: { milestones: true },
+    });
+  }
+
+  async addMilestone(ownerId: string, goalId: string, title: string) {
+    const goal = await this.prisma.goal.findFirst({ where: { id: goalId, ownerId } });
+    if (!goal) throw new HttpError(404, 'NOT_FOUND', 'Goal not found');
+
+    return this.prisma.goalMilestone.create({
+      data: {
+        goalId,
+        ownerId,
+        title,
+      },
     });
   }
 

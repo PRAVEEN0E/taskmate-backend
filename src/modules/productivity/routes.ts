@@ -5,6 +5,7 @@ import {
   createHabitSchema,
   toggleHabitLogSchema,
   createGoalSchema,
+  createMilestoneSchema,
 } from './service.js';
 
 export const productivityRoutes: FastifyPluginAsync<{ productivityService: ProductivityService }> = async (
@@ -67,6 +68,15 @@ export const productivityRoutes: FastifyPluginAsync<{ productivityService: Produ
     const ownerId = req.principal!.sub;
     const body = createGoalSchema.parse(req.body);
     const data = await productivityService.createGoal(ownerId, body);
+    reply.status(201);
+    return { data };
+  });
+
+  app.post('/goals/:goalId/milestones', async (req, reply) => {
+    const ownerId = req.principal!.sub;
+    const { goalId } = req.params as { goalId: string };
+    const body = createMilestoneSchema.parse(req.body);
+    const data = await productivityService.addMilestone(ownerId, goalId, body.title);
     reply.status(201);
     return { data };
   });

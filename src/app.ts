@@ -55,7 +55,7 @@ export async function createApp(
   },
 ) {
   const app = Fastify({
-    bodyLimit: 65536,
+    bodyLimit: 15 * 1024 * 1024, // 15MB to allow base64 file uploads from device
     trustProxy: config.TRUST_PROXY || false,
     logController: new LogController({ disableRequestLogging: true }),
     logger:
