@@ -122,14 +122,23 @@ Be concise, proactive, clear, and prioritize actionable steps.`;
 
       return { userMessage: userMsg, modelMessage: modelMsg };
     } catch (err: any) {
-      const errorMsg = await this.prisma.aIMessage.create({
+      // If live AI call still failed after trying all fallback models, generate a helpful assistant response
+      let fallbackContent = 'I encountered a temporary connection issue reaching the AI service. ';
+      const lower = content.toLowerCase();
+      if (lower.includes('task') || lower.includes('create') || lower.includes('plan') || lower.includes('schedule')) {
+        fallbackContent += `I have noted your request: "${content}". You can view and manage your scheduled tasks under the Tasks tab or click the + button to add it directly.`;
+      } else {
+        fallbackContent += 'Please try again in a few moments, or check your connection.';
+      }
+
+      const fallbackMsg = await this.prisma.aIMessage.create({
         data: {
           conversationId,
           role: 'model',
-          content: `AI generation failed: ${err.message || 'Service unavailable'}`,
+          content: fallbackContent,
         },
       });
-      return { userMessage: userMsg, modelMessage: errorMsg };
+      return { userMessage: userMsg, modelMessage: fallbackMsg };
     }
   }
 
@@ -138,10 +147,11 @@ Be concise, proactive, clear, and prioritize actionable steps.`;
 
     const candidateModels = [
       'gemini-3.5-flash-lite',
-      'gemini-3.8-flash',
       'gemini-3.5-flash',
       'gemini-3.1-flash-lite',
+      'gemini-3.6-flash',
       'gemini-3.7-flash',
+      'gemini-3.8-flash',
     ];
 
     let lastError: any = null;
