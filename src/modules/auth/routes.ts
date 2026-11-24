@@ -3,7 +3,7 @@ import type { Config } from '../../config/env.js';
 import type { AuthStore } from './types.js';
 import { publicOwner } from './types.js';
 import { createAuthService } from './service.js';
-import { loginSchema, passwordChangeSchema } from './schemas.js';
+import { loginSchema, passwordChangeSchema, signupSchema } from './schemas.js';
 import { cookieName } from '../../plugins/security.js';
 export async function authRoutes(app: FastifyInstance, store: AuthStore, config: Config) {
   const service = await createAuthService(store, config.SESSION_MINUTES);
@@ -14,6 +14,46 @@ export async function authRoutes(app: FastifyInstance, store: AuthStore, config:
     path: '/',
   };
   const name = cookieName(config.NODE_ENV === 'production');
+
+  app.post(
+    '/api/v1/auth/signup',
+    {
+      config: { rateLimit: { max: 30, timeWindow: '15 minutes' } },
+      schema: {
+        tags: ['Authentication'],
+        summary: 'Create a new user account',
+        body: {
+          type: 'object',
+          required: ['name', 'email', 'username', 'password'],
+          additionalProperties: false,
+          properties: {
+            name: { type: 'string', minLength: 1, maxLength: 80 },
+            email: { type: 'string', format: 'email', maxLength: 254 },
+            username: { type: 'string', minLength: 3, maxLength: 30 },
+            password: { type: 'string', minLength: 6, maxLength: 72 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const input = signupSchema.parse(req.body);
+      const result = await service.register(input.name, input.email, input.username, input.password);
+      const token = await reply.jwtSign(
+        { sub: result.owner.id, sid: result.session.id, csrf: result.csrf },
+        { expiresIn: config.SESSION_MINUTES * 60 },
+      );
+      reply.setCookie(name, token, { ...options, maxAge: config.SESSION_MINUTES * 60 });
+      reply.status(201);
+      return {
+        data: {
+          owner: publicOwner(result.owner),
+          csrfToken: result.csrf,
+          expiresAt: result.session.expiresAt,
+        },
+      };
+    },
+  );
+
   app.post(
     '/api/v1/auth/login',
     {

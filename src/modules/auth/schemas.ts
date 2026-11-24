@@ -20,6 +20,20 @@ export const loginSchema = z
       .refine((s) => Buffer.byteLength(s, 'utf8') <= 72, 'Password is too long'),
   })
   .strict();
+export const signupSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    email: z.string().trim().email().max(254).transform((v) => v.toLowerCase()),
+    username: z
+      .string()
+      .trim()
+      .min(3)
+      .max(30)
+      .regex(/^[a-zA-Z0-9_-]+$/, 'Username can only contain letters, numbers, underscores and dashes')
+      .transform((v) => v.toLowerCase()),
+    password: z.string().min(6).max(72),
+  })
+  .strict();
 export const passwordChangeSchema = z
   .object({ currentPassword: z.string().min(1).max(256), newPassword: passwordSchema })
   .strict();

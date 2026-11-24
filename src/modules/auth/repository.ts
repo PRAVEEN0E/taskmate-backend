@@ -2,7 +2,37 @@ import type { Database } from '../../services/database.js';
 import type { AuthStore } from './types.js';
 export function prismaAuthStore(db: Database): AuthStore {
   return {
-    findOwner: () => db.user.findUnique({ where: { ownerSlot: 1 } }),
+    findOwner: () => db.user.findFirst({ orderBy: { createdAt: 'asc' } }),
+    findUserById: (id: string) => db.user.findUnique({ where: { id } }),
+    findUserByIdentifier: (identifier: string) =>
+      db.user.findFirst({
+        where: {
+          OR: [
+            { email: { equals: identifier, mode: 'insensitive' } },
+            { username: { equals: identifier, mode: 'insensitive' } },
+          ],
+        },
+      }),
+    createUser: async ({ name, email, username, passwordHash }) =>
+      db.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            name,
+            email,
+            username,
+            passwordHash,
+          },
+        });
+        await tx.userSettings.create({
+          data: {
+            ownerId: user.id,
+            timezone: 'Asia/Kolkata',
+            currency: 'INR',
+            theme: 'dark',
+          },
+        });
+        return user;
+      }),
     recordFailure: async (ownerId) => {
       await db.$transaction(async (tx) => {
         const updated = await tx.user.update({

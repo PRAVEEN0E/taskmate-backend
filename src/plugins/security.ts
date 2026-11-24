@@ -18,7 +18,7 @@ export function addSecurity(app: FastifyInstance, config: Config, store: AuthSto
     }
     if (req.method === 'OPTIONS') return;
     const path = req.url.split('?')[0].replace(/\/$/, '');
-    if (path === '/healthz' || path === '/api/v1/auth/login') return;
+    if (path === '/healthz' || path === '/api/v1/auth/login' || path === '/api/v1/auth/signup') return;
     let claims: Claims;
     try {
       claims = await req.jwtVerify<Claims>({ onlyCookie: true });
@@ -27,7 +27,7 @@ export function addSecurity(app: FastifyInstance, config: Config, store: AuthSto
     }
     if (!claims.sid || !claims.sub || typeof claims.csrf !== 'string')
       throw new HttpError(401, 'UNAUTHORIZED', 'Please sign in.');
-    const [session, owner] = await Promise.all([store.findSession(claims.sid), store.findOwner()]);
+    const [session, owner] = await Promise.all([store.findSession(claims.sid), store.findUserById(claims.sub)]);
     if (
       !session ||
       !owner ||

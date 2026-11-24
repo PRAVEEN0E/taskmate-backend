@@ -24,6 +24,9 @@ export interface Settings {
 }
 export interface AuthStore {
   findOwner(): Promise<Owner | null>;
+  findUserById(id: string): Promise<Owner | null>;
+  findUserByIdentifier(identifier: string): Promise<Owner | null>;
+  createUser(data: { name: string; email: string; username: string; passwordHash: string }): Promise<Owner>;
   recordFailure(ownerId: string): Promise<void>;
   clearFailures(ownerId: string): Promise<void>;
   createSession(ownerId: string, expiresAt: Date): Promise<SessionRecord>;
