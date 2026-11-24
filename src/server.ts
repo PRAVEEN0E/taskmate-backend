@@ -14,6 +14,7 @@ import { ExpenseService } from './modules/expenses/service.js';
 import { PersonalService } from './modules/personal/service.js';
 import { FileService } from './modules/files/service.js';
 import { IntegrationService } from './modules/integration/service.js';
+import { GroupService } from './modules/groups/service.js';
 import { ReminderWorker } from './jobs/reminder-worker.js';
 
 const config = readConfig();
@@ -29,6 +30,7 @@ const expenseService = new ExpenseService(db);
 const personalService = new PersonalService(db);
 const fileService = new FileService(db, config);
 const integrationService = new IntegrationService(db);
+const groupService = new GroupService(db);
 
 const app = await createApp(config, {
   auth: prismaAuthStore(db),
@@ -43,6 +45,7 @@ const app = await createApp(config, {
   personalService,
   fileService,
   integrationService,
+  groupService,
 });
 
 // Reminder background worker
@@ -71,6 +74,72 @@ try {
     app.log.info('Ensured User.ownerSlot is nullable and has no default.');
   } catch (schemaErr) {
     app.log.warn({ err: schemaErr }, 'Non-fatal: Database schema adjustment on ownerSlot skipped or already applied.');
+  }
+
+  // Ensure Collaborative Groups tables exist
+  try {
+    await db.$executeRawUnsafe(`
+      DO $$ BEGIN
+        CREATE TYPE "GroupRole" AS ENUM ('ADMIN', 'MEMBER', 'VIEWER');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+
+      CREATE TABLE IF NOT EXISTS "Group" (
+        "id" UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+        "name" VARCHAR(100) NOT NULL,
+        "description" VARCHAR(255) DEFAULT '',
+        "code" TEXT NOT NULL UNIQUE,
+        "ownerId" UUID NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+        "createdAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS "GroupMember" (
+        "id" UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+        "groupId" UUID NOT NULL REFERENCES "Group"("id") ON DELETE CASCADE,
+        "userId" UUID NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+        "role" "GroupRole" NOT NULL DEFAULT 'MEMBER',
+        "joinedAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "GroupMember_groupId_userId_key" UNIQUE ("groupId", "userId")
+      );
+
+      CREATE TABLE IF NOT EXISTS "GroupNote" (
+        "id" UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+        "groupId" UUID NOT NULL REFERENCES "Group"("id") ON DELETE CASCADE,
+        "authorId" UUID NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+        "title" VARCHAR(160) NOT NULL,
+        "content" TEXT NOT NULL DEFAULT '',
+        "pinned" BOOLEAN NOT NULL DEFAULT false,
+        "createdAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS "GroupTask" (
+        "id" UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+        "groupId" UUID NOT NULL REFERENCES "Group"("id") ON DELETE CASCADE,
+        "creatorId" UUID NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+        "assigneeId" UUID REFERENCES "User"("id") ON DELETE SET NULL,
+        "title" VARCHAR(160) NOT NULL,
+        "status" "TaskStatus" NOT NULL DEFAULT 'TODO',
+        "priority" "Priority" NOT NULL DEFAULT 'MEDIUM',
+        "dueAt" TIMESTAMPTZ(3),
+        "createdAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS "GroupActivity" (
+        "id" UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+        "groupId" UUID NOT NULL REFERENCES "Group"("id") ON DELETE CASCADE,
+        "userId" UUID NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+        "action" TEXT NOT NULL,
+        "target" TEXT NOT NULL,
+        "createdAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    app.log.info('Ensured Group collaboration tables exist.');
+  } catch (groupTableErr) {
+    app.log.warn({ err: groupTableErr }, 'Non-fatal: Group table bootstrap skipped or already applied.');
   }
 
   // Auto-bootstrap owner account if no owner exists yet

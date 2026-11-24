@@ -97,6 +97,12 @@ model User {
   files          FileAsset[]
   fileFolders    FileFolder[]
   notifications  Notification[]
+  createdGroups  Group[]         @relation("GroupCreator")
+  groupMemberships GroupMember[]
+  groupNotes     GroupNote[]
+  createdGroupTasks GroupTask[]  @relation("GroupTaskCreator")
+  assignedGroupTasks GroupTask[] @relation("GroupTaskAssignee")
+  groupActivities GroupActivity[]
 }
 
 model Session {
@@ -678,3 +684,90 @@ model ProjectAttachment {
 
   @@id([projectId, fileId])
 }
+
+// ---------------------- PHASE 7: COLLABORATIVE GROUPS ----------------------
+
+enum GroupRole {
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+model Group {
+  id          String        @id @default(uuid()) @db.Uuid
+  name        String        @db.VarChar(100)
+  description String?       @db.VarChar(255)
+  code        String        @unique
+  ownerId     String        @db.Uuid
+  owner       User          @relation("GroupCreator", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(3)
+
+  members     GroupMember[]
+  notes       GroupNote[]
+  tasks       GroupTask[]
+  activities  GroupActivity[]
+
+  @@index([ownerId])
+}
+
+model GroupMember {
+  id        String    @id @default(uuid()) @db.Uuid
+  groupId   String    @db.Uuid
+  group     Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      GroupRole @default(MEMBER)
+  joinedAt  DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@unique([groupId, userId])
+  @@index([userId])
+  @@index([groupId])
+}
+
+model GroupNote {
+  id        String   @id @default(uuid()) @db.Uuid
+  groupId   String   @db.Uuid
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  authorId  String   @db.Uuid
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  title     String   @db.VarChar(160)
+  content   String
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([groupId, createdAt])
+}
+
+model GroupTask {
+  id          String      @id @default(uuid()) @db.Uuid
+  groupId     String      @db.Uuid
+  group       Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  creatorId   String      @db.Uuid
+  creator     User        @relation("GroupTaskCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  assigneeId  String?     @db.Uuid
+  assignee    User?       @relation("GroupTaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  title       String      @db.VarChar(160)
+  status      TaskStatus  @default(TODO)
+  priority    Priority    @default(MEDIUM)
+  dueAt       DateTime?   @db.Timestamptz(3)
+  createdAt   DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime    @updatedAt @db.Timestamptz(3)
+
+  @@index([groupId, status])
+}
+
+model GroupActivity {
+  id        String   @id @default(uuid()) @db.Uuid
+  groupId   String   @db.Uuid
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String
+  target    String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([groupId, createdAt])
+}
+

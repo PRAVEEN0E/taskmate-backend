@@ -36,6 +36,8 @@ import { FileService } from './modules/files/service.js';
 import { fileRoutes } from './modules/files/routes.js';
 import { IntegrationService } from './modules/integration/service.js';
 import { integrationRoutes } from './modules/integration/routes.js';
+import { GroupService } from './modules/groups/service.js';
+import { groupRoutes } from './modules/groups/routes.js';
 
 export async function createApp(
   config: Config,
@@ -52,6 +54,7 @@ export async function createApp(
     personalService?: PersonalService;
     fileService?: FileService;
     integrationService?: IntegrationService;
+    groupService?: GroupService;
   },
 ) {
   const app = Fastify({
@@ -166,6 +169,7 @@ export async function createApp(
       if (deps.personalService) personalRoutes(v1, { personalService: deps.personalService });
       if (deps.fileService) fileRoutes(v1, { fileService: deps.fileService });
       if (deps.integrationService) integrationRoutes(v1, { integrationService: deps.integrationService });
+      if (deps.groupService) groupRoutes(v1, { groupService: deps.groupService });
     },
     { prefix: '/api/v1' },
   );
