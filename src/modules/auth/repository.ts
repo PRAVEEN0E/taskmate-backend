@@ -15,12 +15,21 @@ export function prismaAuthStore(db: Database): AuthStore {
       }),
     createUser: async ({ name, email, username, passwordHash }) =>
       db.$transaction(async (tx) => {
+        // Try executing table alteration inside transaction if not yet executed
+        try {
+          await tx.$executeRawUnsafe(`ALTER TABLE "User" ALTER COLUMN "ownerSlot" DROP NOT NULL;`);
+          await tx.$executeRawUnsafe(`ALTER TABLE "User" ALTER COLUMN "ownerSlot" DROP DEFAULT;`);
+        } catch {
+          // Ignore if already altered or restricted
+        }
+
         const user = await tx.user.create({
           data: {
             name,
             email,
             username,
             passwordHash,
+            ownerSlot: null,
           },
         });
         await tx.userSettings.create({

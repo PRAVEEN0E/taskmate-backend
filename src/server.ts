@@ -64,6 +64,15 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 try {
   await db.$connect();
 
+  // Ensure database constraints allow multi-user signup without schema conflicts
+  try {
+    await db.$executeRawUnsafe(`ALTER TABLE "User" ALTER COLUMN "ownerSlot" DROP NOT NULL;`);
+    await db.$executeRawUnsafe(`ALTER TABLE "User" ALTER COLUMN "ownerSlot" DROP DEFAULT;`);
+    app.log.info('Ensured User.ownerSlot is nullable and has no default.');
+  } catch (schemaErr) {
+    app.log.warn({ err: schemaErr }, 'Non-fatal: Database schema adjustment on ownerSlot skipped or already applied.');
+  }
+
   // Auto-bootstrap owner account if no owner exists yet
   const ownerCount = await db.user.count();
   if (ownerCount === 0) {

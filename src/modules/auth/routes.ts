@@ -36,21 +36,26 @@ export async function authRoutes(app: FastifyInstance, store: AuthStore, config:
       },
     },
     async (req, reply) => {
-      const input = signupSchema.parse(req.body);
-      const result = await service.register(input.name, input.email, input.username, input.password);
-      const token = await reply.jwtSign(
-        { sub: result.owner.id, sid: result.session.id, csrf: result.csrf },
-        { expiresIn: config.SESSION_MINUTES * 60 },
-      );
-      reply.setCookie(name, token, { ...options, maxAge: config.SESSION_MINUTES * 60 });
-      reply.status(201);
-      return {
-        data: {
-          owner: publicOwner(result.owner),
-          csrfToken: result.csrf,
-          expiresAt: result.session.expiresAt,
-        },
-      };
+      try {
+        const input = signupSchema.parse(req.body);
+        const result = await service.register(input.name, input.email, input.username, input.password);
+        const token = await reply.jwtSign(
+          { sub: result.owner.id, sid: result.session.id, csrf: result.csrf },
+          { expiresIn: config.SESSION_MINUTES * 60 },
+        );
+        reply.setCookie(name, token, { ...options, maxAge: config.SESSION_MINUTES * 60 });
+        reply.status(201);
+        return {
+          data: {
+            owner: publicOwner(result.owner),
+            csrfToken: result.csrf,
+            expiresAt: result.session.expiresAt,
+          },
+        };
+      } catch (err) {
+        req.log.error({ err }, 'Signup registration error details');
+        throw err;
+      }
     },
   );
 
