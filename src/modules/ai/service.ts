@@ -107,6 +107,52 @@ Be concise, proactive, clear, and prioritize actionable steps.`;
         { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser: ${content}` }] },
       ]);
 
+      // If user prompt asks to create or schedule a task, automatically extract and persist it to Tasks table!
+      const lower = content.toLowerCase();
+      if (
+        lower.includes('create task') ||
+        lower.includes('create a task') ||
+        lower.includes('add task') ||
+        lower.includes('add a task') ||
+        lower.includes('schedule a task')
+      ) {
+        try {
+          // Clean title from prompt
+          let taskTitle = content
+            .replace(/^(create|add|schedule|please create|can you create)\s+(a\s+)?(task\s+)?(to\s+)?/i, '')
+            .replace(/\s+by\s+tomorrow/i, '')
+            .replace(/\s+tomorrow/i, '')
+            .trim();
+          if (taskTitle.length > 80) taskTitle = taskTitle.slice(0, 80);
+
+          let dueAt: Date | null = null;
+          if (lower.includes('tomorrow')) {
+            const tmr = new Date();
+            tmr.setDate(tmr.getDate() + 1);
+            tmr.setHours(18, 0, 0, 0);
+            dueAt = tmr;
+          }
+
+          const priority = lower.includes('urgent')
+            ? 'URGENT'
+            : lower.includes('high')
+            ? 'HIGH'
+            : 'MEDIUM';
+
+          await this.prisma.task.create({
+            data: {
+              ownerId,
+              title: taskTitle.charAt(0).toUpperCase() + taskTitle.slice(1),
+              description: `Created via Buddio AI Assistant.\n\nContext:\n${content}`,
+              priority,
+              dueAt,
+            },
+          });
+        } catch (taskErr) {
+          console.warn('Auto task persistence non-fatal error:', taskErr);
+        }
+      }
+
       const modelMsg = await this.prisma.aIMessage.create({
         data: {
           conversationId,
